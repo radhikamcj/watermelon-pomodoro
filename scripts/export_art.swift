@@ -203,11 +203,59 @@ func fitBackground(_ image: CGImage, fill: (Double, Double, Double)? = nil) -> C
     return out.image
 }
 
+/// A cleaner play button in the same white crayon style: a rounded triangle about 0.88x as wide
+/// as it is tall, with all three corners rounded alike (the hand-drawn one was long and pointy).
+/// The edge gets the same gentle roughness as the smoothed border.
+func playGlyph() -> CGImage {
+    // Size of the triangle before rounding; rounding trims the tips, and the result is cropped
+    // to what's visible, landing at the same height as the pause bars (~115 tall x 104 wide).
+    let height = 136.0, width = 117.0, cornerRadius = 15.5, pad = 10.0
+    let out = Pixels(width: Int(width + pad * 2), height: Int(height + pad * 2))
+
+    // Triangle pointing right, inset by the corner radius (scaled toward its incenter) so that
+    // growing it back by the radius gives round corners at the original size.
+    let a = (pad, pad), b = (pad, pad + height), c = (pad + width, pad + height / 2)
+    func dist(_ p: (Double, Double), _ q: (Double, Double)) -> Double { ((p.0 - q.0) * (p.0 - q.0) + (p.1 - q.1) * (p.1 - q.1)).squareRoot() }
+    let la = dist(b, c), lb = dist(c, a), lc = dist(a, b)
+    let incenter = ((la * a.0 + lb * b.0 + lc * c.0) / (la + lb + lc), (la * a.1 + lb * b.1 + lc * c.1) / (la + lb + lc))
+    let inradius = width * height / (la + lb + lc)
+    let k = (inradius - cornerRadius) / inradius
+    let tri = [a, b, c].map { (incenter.0 + ($0.0 - incenter.0) * k, incenter.1 + ($0.1 - incenter.1) * k) }
+
+    /// Signed distance to a polygon (negative inside).
+    func sdf(_ p: (Double, Double)) -> Double {
+        var d = Double.infinity, inside = false
+        for i in 0..<tri.count {
+            let v = tri[i], w = tri[(i + tri.count - 1) % tri.count]
+            let e = (w.0 - v.0, w.1 - v.1), q = (p.0 - v.0, p.1 - v.1)
+            let t = max(0, min(1, (q.0 * e.0 + q.1 * e.1) / (e.0 * e.0 + e.1 * e.1)))
+            d = min(d, dist(q, (e.0 * t, e.1 * t)))
+            if (v.1 > p.1) != (w.1 > p.1), p.0 < (w.0 - v.0) * (p.1 - v.1) / (w.1 - v.1) + v.0 { inside.toggle() }
+        }
+        return inside ? -d : d
+    }
+
+    for y in 0..<out.h {
+        for x in 0..<out.w {
+            let fx = Double(x) + 0.5, fy = Double(y) + 0.5
+            let wobble = (noise(fx, fy, scale: 5, seed: 41) - 0.5) * 2.4 + (noise(fx, fy, scale: 1.6, seed: 43) - 0.5) * 1.2
+            let edge = cornerRadius - sdf((fx, fy)) + wobble
+            let mask = min(1, max(0, edge / 1.4 + 0.5))
+            guard mask > 0 else { continue }
+            // Faint crayon grain inside.
+            let alpha = 255 * mask * (0.94 + 0.06 * noise(fx, fy, scale: 1.2, seed: 47))
+            out.set(x, y, (alpha, alpha, alpha, alpha))   // premultiplied white
+        }
+    }
+    let image = out.image
+    return image.cropping(to: visibleBounds(image, padding: 4))!
+}
+
 save(fitBackground(load("white_bg")), "white_bg")
 save(fitBackground(load("pink_bg"), fill: (255, 176, 176)), "pink_bg")   // #FFB0B0, the background's average
 save(smoothBorder(load("border")), "border")
 
-let glyphs = (0...9).map(String.init) + ["colon", "minus", "plus", "play", "pause"]
+let glyphs = (0...9).map(String.init) + ["colon", "minus", "plus", "pause"]
 for name in glyphs {
     let image = load(name)
     // The minus is a single thin stroke, so it gets extra weight to hold its own next to ▶ and +.
@@ -218,5 +266,7 @@ for name in glyphs {
 // Same crop as the Figma frame: the left 469 x 560 of the canvas. The app rotates it upright.
 // Keep in sync with WidgetView.Layout.watermelonSize.
 save(load("watermelon").cropping(to: CGRect(x: 0, y: 0, width: 469, height: 560))!, "watermelon")
+
+save(playGlyph(), "play")
 
 print("Exported art to \(dst.path)")

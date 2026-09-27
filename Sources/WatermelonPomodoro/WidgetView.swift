@@ -58,6 +58,10 @@ enum Layout {
     static let watermelonSize = CGSize(width: 469, height: 560)
     static let watermelonCenter = CGPoint(x: 138, y: 279.9)
     static let watermelonAngle: Double = 42.44
+    /// The watermelon's center as a fraction of the canvas, for rotating and scaling around it.
+    static var watermelonAnchor: UnitPoint {
+        UnitPoint(x: watermelonCenter.x / canvas.width, y: watermelonCenter.y / canvas.height)
+    }
 
     // Time: sized so the widest format (HH:MM:SS) fits between the watermelon's cut edge
     // (x ~ 190 at this height) and ~5pt before the border's inner edge (x = 931).
@@ -124,23 +128,37 @@ struct WidgetView: View {
 
     // MARK: Watermelon
 
+    /// The slice plus the two rind shapes behind it (Figma "Vector 1" and "Vector 2"),
+    /// grouped so they sway and shake together.
     private var watermelon: some View {
-        Image(nsImage: Art.image("watermelon"))
-            .resizable()
-            .interpolation(.high)
-            .frame(width: Layout.watermelonSize.width, height: Layout.watermelonSize.height)
-            .rotationEffect(.degrees(Layout.watermelonAngle))
+        ZStack(alignment: .topLeading) {
+            RindShape.outer
+                .fill(RindShape.outerColor)
+                .frame(width: RindShape.outer.size.width, height: RindShape.outer.size.height)
+                .offset(x: RindShape.outer.origin.x, y: RindShape.outer.origin.y)
+            RindShape.inner
+                .fill(RindShape.innerColor)
+                .frame(width: RindShape.inner.size.width, height: RindShape.inner.size.height)
+                .offset(x: RindShape.inner.origin.x, y: RindShape.inner.origin.y)
+            Image(nsImage: Art.image("watermelon"))
+                .resizable()
+                .interpolation(.high)
+                .frame(width: Layout.watermelonSize.width, height: Layout.watermelonSize.height)
+                .rotationEffect(.degrees(Layout.watermelonAngle))
+                .position(Layout.watermelonCenter)
+        }
+        .frame(width: Layout.canvas.width, height: Layout.canvas.height, alignment: .topLeading)
             // Gentle sway while focusing.
             .phaseAnimator([-2.5, 2.5]) { content, angle in
-                content.rotationEffect(.degrees(timer.isRunning ? angle : 0))
+                content.rotationEffect(.degrees(timer.isRunning ? angle : 0), anchor: Layout.watermelonAnchor)
             } animation: { _ in
                 .easeInOut(duration: 1.4)
             }
             // Big happy shake when a session ends.
             .keyframeAnimator(initialValue: Shake(), trigger: timer.celebrationCount) { content, shake in
                 content
-                    .rotationEffect(.degrees(shake.angle))
-                    .scaleEffect(shake.scale)
+                    .rotationEffect(.degrees(shake.angle), anchor: Layout.watermelonAnchor)
+                    .scaleEffect(shake.scale, anchor: Layout.watermelonAnchor)
                     .offset(y: shake.lift)
             } keyframes: { _ in
                 KeyframeTrack(\.angle) {
@@ -174,7 +192,6 @@ struct WidgetView: View {
                     CubicKeyframe(0, duration: 0.25)
                 }
             }
-            .position(Layout.watermelonCenter)
             .allowsHitTesting(false)
     }
 
@@ -299,5 +316,50 @@ struct SquishStyle: ButtonStyle {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.85 : 1)
             .animation(.spring(response: 0.2, dampingFraction: 0.5), value: configuration.isPressed)
+    }
+}
+
+// MARK: - Rind
+
+/// The flat rind shapes drawn behind the watermelon in the Figma frame: a dark green crescent
+/// (Vector 1) with a salmon shape over it (Vector 2), so an even band of dark green shows.
+/// Paths are copied from Figma's SVG export; `origin` is their spot on the design canvas.
+struct RindShape: Shape {
+    let origin: CGPoint
+    let size: CGSize
+    let draw: @Sendable (inout Path) -> Void
+
+    static let outerColor = Color(red: 0x13 / 255, green: 0x43 / 255, blue: 0)          // #134300
+    static let innerColor = Color(red: 1, green: 0xAE / 255, blue: 0x9B / 255)          // #FFAE9B
+
+    // Figma positions are relative to the frame, whose canvas starts at (13, -24).
+    static let outer = RindShape(origin: CGPoint(x: -60.11 - 13, y: 38 + 24),
+                                 size: CGSize(width: 330.106, height: 438)) { p in
+        p.move(to: CGPoint(x: 11.7834, y: 292.166))
+        p.addCurve(to: CGPoint(x: 180.689, y: 0),
+                   control1: CGPoint(x: -41.394, y: 104.5), control2: CGPoint(x: 97.9021, y: 17.48))
+        p.addLine(to: CGPoint(x: 330.106, y: 410.53))
+        p.addCurve(to: CGPoint(x: 11.7834, y: 292.166),
+                   control1: CGPoint(x: 250.484, y: 450.984), control2: CGPoint(x: 71.0441, y: 470.961))
+        p.closeSubpath()
+    }
+
+    static let inner = RindShape(origin: CGPoint(x: -23.45 - 13, y: 38 + 24),
+                                 size: CGSize(width: 293.451, height: 436.119)) { p in
+        p.move(to: CGPoint(x: 14.9508, y: 286))
+        p.addCurve(to: CGPoint(x: 144.034, y: 0),
+                   control1: CGPoint(x: -38.2266, y: 98.3342), control2: CGPoint(x: 61.2469, y: 17.48))
+        p.addLine(to: CGPoint(x: 293.451, y: 410.53))
+        p.addCurve(to: CGPoint(x: 14.9508, y: 286),
+                   control1: CGPoint(x: 213.828, y: 450.984), control2: CGPoint(x: 74.2115, y: 464.795))
+        p.closeSubpath()
+    }
+
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        draw(&p)
+        // Stretch from the SVG's own size to whatever frame it's given (they match here).
+        return p.applying(CGAffineTransform(translationX: rect.minX, y: rect.minY)
+            .scaledBy(x: rect.width / size.width, y: rect.height / size.height))
     }
 }

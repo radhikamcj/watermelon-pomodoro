@@ -12,18 +12,20 @@ A tiny, hand-drawn pomodoro timer for macOS that floats on top of every app.
 - Shows `MM:SS` under an hour and `HH:MM:SS` from an hour up
 - **– ▶ ❚❚ +** sit in one fixed row, so nothing moves around as the time changes
 - The watermelon sways while you focus. When time's up it shakes, hops and pops seeds 🎉
-- Right-click for presets, **Reset**, **Preview celebration** and **Quit**
+- Right-click for presets, **Reset**, **Open at login**, **Preview celebration** and **Quit**
 
 ## Build & run
 
 Requires macOS 14+ and the Swift toolchain (Xcode or the Command Line Tools: `xcode-select --install`).
 
 ```bash
-./build.sh
-open build/Watermelon.app
+./build.sh --install
+open /Applications/Watermelon.app
 ```
 
-To keep it around, drag `build/Watermelon.app` into your **Applications** folder.
+`--install` copies the app into **Applications** (plain `./build.sh` just builds `build/Watermelon.app`).
+The widget has no Dock icon; to bring it back after quitting, open **Watermelon** from Spotlight,
+or right-click it and turn on **Open at login** so it starts with your Mac.
 
 ## Artwork
 

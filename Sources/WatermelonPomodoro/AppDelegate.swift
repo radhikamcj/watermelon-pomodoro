@@ -6,6 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var panel: FloatingPanel!
     private var seedPanel: SeedPanel!
     private let timer = PomodoroTimer()
+    private let loginItem = LoginItem()
     private var celebrationWatch: AnyCancellable?
     private var hideSeeds: DispatchWorkItem?
 
@@ -13,7 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let size = Layout.windowSize
         panel = FloatingPanel(contentRect: NSRect(origin: .zero, size: size))
 
-        let hosting = FirstClickHostingView(rootView: WidgetView().environmentObject(timer))
+        let hosting = FirstClickHostingView(rootView: WidgetView().environmentObject(timer).environmentObject(loginItem))
         hosting.frame = NSRect(origin: .zero, size: size)
         panel.contentView = hosting
 

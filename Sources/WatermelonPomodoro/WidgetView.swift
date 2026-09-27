@@ -92,6 +92,7 @@ enum Layout {
 
 struct WidgetView: View {
     @EnvironmentObject private var timer: PomodoroTimer
+    @EnvironmentObject private var loginItem: LoginItem
     @State private var dragStart: (mouse: NSPoint, origin: NSPoint)?
 
     var body: some View {
@@ -270,6 +271,7 @@ struct WidgetView: View {
         Button("☁️  Break 15 min") { timer.setMinutes(15, for: .rest) }
         Divider()
         Button("Reset") { timer.reset() }
+        Toggle("Open at login", isOn: Binding(get: { loginItem.isEnabled }, set: { loginItem.setEnabled($0) }))
         Button("Preview celebration 🎉") { timer.celebrate() }
         Button("Quit Watermelon") { NSApp.terminate(nil) }
     }

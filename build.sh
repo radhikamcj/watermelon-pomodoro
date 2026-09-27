@@ -22,3 +22,11 @@ cp -R Resources/Art "$APP/Contents/Resources/Art"
 codesign --force --sign - "$APP" >/dev/null
 
 echo "Built $APP"
+
+# ./build.sh --install  also copies it into /Applications (quitting a running copy first).
+if [ "${1:-}" = "--install" ]; then
+    pkill -x Watermelon || true
+    rm -rf /Applications/Watermelon.app
+    cp -R "$APP" /Applications/Watermelon.app
+    echo "Installed /Applications/Watermelon.app"
+fi

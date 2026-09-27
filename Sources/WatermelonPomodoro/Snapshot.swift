@@ -11,7 +11,7 @@ enum Snapshot {
         let margin = SeedPanel.margin
         let origin = CGPoint(x: margin + Layout.seedOrigin.x, y: margin + Layout.seedOrigin.y)
         let content = ZStack(alignment: .topLeading) {
-            WidgetView().environmentObject(timer)
+            WidgetView().environmentObject(timer).environmentObject(LoginItem())
                 .padding(seeds ? margin : 0)
             if seeds {
                 SeedBurstView(seeds: Seed.bursts(from: origin), startDate: Date().addingTimeInterval(-0.3))

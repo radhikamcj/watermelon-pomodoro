@@ -60,11 +60,13 @@ for name in ["white_bg", "pink_bg", "border"] {
 let glyphs = (0...9).map(String.init) + ["colon", "minus", "plus", "play", "pause"]
 for name in glyphs {
     let image = load(name)
-    save(thicken(image.cropping(to: visibleBounds(image))!, by: strokeBoost), name)
+    // The minus is a single thin stroke, so it gets extra weight to hold its own next to ▶ and +.
+    let boost = name == "minus" ? strokeBoost + 5 : strokeBoost
+    save(thicken(image.cropping(to: visibleBounds(image))!, by: boost), name)
 }
 
-// The slice has a few pale smudges around it on the canvas; keep just the slice.
-// Keep in sync with WidgetView.Layout.watermelonRect.
-save(load("watermelon").cropping(to: CGRect(x: 14, y: 127, width: 443, height: 369))!, "watermelon")
+// Same crop as the Figma frame: the left 469 x 560 of the canvas. The app rotates it upright.
+// Keep in sync with WidgetView.Layout.watermelonSize.
+save(load("watermelon").cropping(to: CGRect(x: 0, y: 0, width: 469, height: 560))!, "watermelon")
 
 print("Exported art to \(dst.path)")

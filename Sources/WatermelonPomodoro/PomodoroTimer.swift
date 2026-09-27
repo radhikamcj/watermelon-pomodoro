@@ -30,8 +30,12 @@ final class PomodoroTimer: ObservableObject {
     /// What the timer was last set to, so Reset can go back to it.
     private var setSeconds = 0
 
+    /// MM:SS under an hour, HH:MM:SS from an hour up.
     var timeText: String {
-        String(format: "%02d:%02d", remaining / 60, remaining % 60)
+        let hours = remaining / 3600, minutes = remaining / 60 % 60, seconds = remaining % 60
+        return hours > 0
+            ? String(format: "%02d:%02d:%02d", hours, minutes, seconds)
+            : String(format: "%02d:%02d", minutes, seconds)
     }
 
     // MARK: - Controls

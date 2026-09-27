@@ -44,29 +44,43 @@ enum Layout {
     static var widgetSize: CGSize { CGSize(width: canvas.width * scale, height: canvas.height * scale) }
     /// Room around the art for the soft pink shadow, in points.
     static let shadowPadding: CGFloat = 18
+    /// Extra room on the left: the watermelon's rind hangs past the card's edge (more so mid-shake).
+    static let leftOverhang: CGFloat = 24
     static var windowSize: CGSize {
-        CGSize(width: widgetSize.width + shadowPadding * 2, height: widgetSize.height + shadowPadding * 2)
+        CGSize(width: widgetSize.width + shadowPadding * 2 + leftOverhang,
+               height: widgetSize.height + shadowPadding * 2)
     }
     /// Average color of pink_bg.png.
     static let pink = Color(red: 1, green: 0xB0 / 255, blue: 0xB0 / 255)
 
-    /// Keep in sync with the crop in scripts/export_art.swift.
-    static let watermelonRect = CGRect(x: 14, y: 127, width: 443, height: 369)
-    static let timeRowCenter = CGPoint(x: 640, y: 192)
-    static let controlsCenter = CGPoint(x: 640, y: 428)
+    // Watermelon, placed as in the Figma frame: the left 469 x 560 of its canvas,
+    // turned 42.44° clockwise so it stands upright. Keep in sync with scripts/export_art.swift.
+    static let watermelonSize = CGSize(width: 469, height: 560)
+    static let watermelonCenter = CGPoint(x: 138, y: 279.9)
+    static let watermelonAngle: Double = 42.44
 
-    static let timeRowMaxWidth: CGFloat = 620
-    static let glyphScale: CGFloat = 0.8
-    static let glyphSpacing: CGFloat = 2
+    // Time: sized so the widest format (HH:MM:SS) fits between the watermelon's cut edge
+    // (x ~ 190 at this height) and ~5pt before the border's inner edge (x = 931).
+    static let timeCenter = CGPoint(x: 570, y: 185)
+    static let glyphScale: CGFloat = 0.7
+    /// Every digit gets the same width, like a digital clock, so nothing shifts as seconds tick.
+    static let digitSlot: CGFloat = 142
+
+    // Controls: one fixed row  –  ▶  ❚❚  +  that never moves.
+    static let controlsCenter = CGPoint(x: 570, y: 405)
     static let signScale: CGFloat = 0.6
-    static let signSpacing: CGFloat = 16
+    static let minusScale: CGFloat = 0.7
+    static let playPauseScale: CGFloat = 0.9
+    static let signToPlayPause: CGFloat = 40
+    static let playToPause: CGFloat = 50
 
-    /// Middle of the watermelon's red flesh, in design pixels.
-    static let fleshCenter = CGPoint(x: 215, y: 265)
+    /// Middle of the watermelon's red flesh once it's turned upright, in design pixels.
+    static let fleshCenter = CGPoint(x: 134, y: 256)
 
     /// Where seeds pop from, in points from the window's top-left corner.
     static var seedOrigin: CGPoint {
-        CGPoint(x: shadowPadding + fleshCenter.x * scale, y: shadowPadding + fleshCenter.y * scale)
+        CGPoint(x: shadowPadding + leftOverhang + fleshCenter.x * scale,
+                y: shadowPadding + fleshCenter.y * scale)
     }
 }
 
@@ -89,15 +103,16 @@ struct WidgetView: View {
             .gesture(windowDrag)
             .contextMenu { menu }
 
-            watermelon
             layer("border").allowsHitTesting(false)
-            timeRow.position(Layout.timeRowCenter)
+            watermelon
+            time.position(Layout.timeCenter)
             controls.position(Layout.controlsCenter)
         }
         .frame(width: Layout.canvas.width, height: Layout.canvas.height, alignment: .topLeading)
         .scaleEffect(Layout.scale, anchor: .topLeading)
         .frame(width: Layout.widgetSize.width, height: Layout.widgetSize.height, alignment: .topLeading)
         .padding(Layout.shadowPadding)
+        .padding(.leading, Layout.leftOverhang)
     }
 
     private func layer(_ name: String) -> some View {
@@ -113,10 +128,11 @@ struct WidgetView: View {
         Image(nsImage: Art.image("watermelon"))
             .resizable()
             .interpolation(.high)
-            .frame(width: Layout.watermelonRect.width, height: Layout.watermelonRect.height)
+            .frame(width: Layout.watermelonSize.width, height: Layout.watermelonSize.height)
+            .rotationEffect(.degrees(Layout.watermelonAngle))
             // Gentle sway while focusing.
             .phaseAnimator([-2.5, 2.5]) { content, angle in
-                content.rotationEffect(.degrees(timer.isRunning ? angle : 0), anchor: .bottom)
+                content.rotationEffect(.degrees(timer.isRunning ? angle : 0))
             } animation: { _ in
                 .easeInOut(duration: 1.4)
             }
@@ -158,54 +174,51 @@ struct WidgetView: View {
                     CubicKeyframe(0, duration: 0.25)
                 }
             }
-            .position(x: Layout.watermelonRect.midX, y: Layout.watermelonRect.midY)
+            .position(Layout.watermelonCenter)
             .allowsHitTesting(false)
     }
 
-    // MARK: Time row:  –  25:00  +
+    // MARK: Time
 
-    private var timeRow: some View {
-        let glyphs = timer.timeText.map(Art.glyphName(for:))
-        let signsWidth = ["minus", "plus"]
-            .map { max(ArtButton.minHitSize, Art.size($0).width * Layout.signScale) }
-            .reduce(0, +) + Layout.signSpacing * 2
-        let naturalWidth = glyphs.reduce(0) { $0 + Art.size($1).width }
-            + Layout.glyphSpacing * CGFloat(glyphs.count - 1)
-        // Shrink the digits if a long time (like 120:00) wouldn't fit.
-        let glyphScale = min(Layout.glyphScale, (Layout.timeRowMaxWidth - signsWidth) / naturalWidth)
+    private var time: some View {
+        let scale = Layout.glyphScale
+        return HStack(spacing: 0) {
+            ForEach(Array(timer.timeText.map(Art.glyphName(for:)).enumerated()), id: \.offset) { _, name in
+                let size = Art.size(name)
+                let slot = name == "colon" ? size.width : Layout.digitSlot
+                Image(nsImage: Art.image(name))
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: size.width * scale, height: size.height * scale)
+                    .frame(width: slot * scale)
+            }
+        }
+        .allowsHitTesting(false)
+    }
 
-        return HStack(spacing: Layout.signSpacing) {
-            ArtButton(name: "minus", scale: Layout.signScale, enabled: timer.canAdjustDown) {
+    // MARK: Controls:  –  ▶  ❚❚  +
+
+    private var controls: some View {
+        HStack(spacing: 0) {
+            ArtButton(name: "minus", scale: Layout.minusScale, enabled: timer.canAdjustDown) {
                 timer.adjust(up: false)
             }
             .help("15 minutes less")
 
-            HStack(spacing: Layout.glyphSpacing) {
-                ForEach(Array(glyphs.enumerated()), id: \.offset) { _, name in
-                    let size = Art.size(name)
-                    Image(nsImage: Art.image(name))
-                        .resizable()
-                        .interpolation(.high)
-                        .frame(width: size.width * glyphScale, height: size.height * glyphScale)
-                }
-            }
-            .allowsHitTesting(false)
+            ArtButton(name: "play", scale: Layout.playPauseScale,
+                      enabled: timer.isRunning || timer.canStart, dimmed: timer.isRunning) { timer.start() }
+                .help("Start")
+                .padding(.leading, Layout.signToPlayPause)
+
+            ArtButton(name: "pause", scale: Layout.playPauseScale, dimmed: !timer.isRunning) { timer.pause() }
+                .help("Pause")
+                .padding(.leading, Layout.playToPause)
 
             ArtButton(name: "plus", scale: Layout.signScale, enabled: timer.canAdjustUp) {
                 timer.adjust(up: true)
             }
             .help("15 minutes more")
-        }
-    }
-
-    // MARK: Play / pause
-
-    private var controls: some View {
-        HStack(spacing: 50) {
-            ArtButton(name: "play", scale: 0.9, enabled: timer.isRunning || timer.canStart, dimmed: timer.isRunning) { timer.start() }
-                .help("Start")
-            ArtButton(name: "pause", scale: 0.9, dimmed: !timer.isRunning) { timer.pause() }
-                .help("Pause")
+            .padding(.leading, Layout.signToPlayPause)
         }
     }
 
@@ -255,7 +268,8 @@ struct Shake {
 
 /// A button drawn with one of the hand-drawn glyphs, with a generous click area.
 struct ArtButton: View {
-    static let minHitSize: CGFloat = 100
+    /// Extra clickable area around the drawing, without taking up layout space.
+    static let hitPadding: CGFloat = 22
 
     let name: String
     var scale: CGFloat = 1
@@ -270,10 +284,11 @@ struct ArtButton: View {
                 .resizable()
                 .interpolation(.high)
                 .frame(width: size.width * scale, height: size.height * scale)
-                .frame(minWidth: Self.minHitSize, minHeight: Self.minHitSize)
+                .padding(Self.hitPadding)
                 .contentShape(Rectangle())
         }
         .buttonStyle(SquishStyle())
+        .padding(-Self.hitPadding)
         .opacity(!enabled ? 0.35 : dimmed ? 0.5 : 1)
         .disabled(!enabled)
     }

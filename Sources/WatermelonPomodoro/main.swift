@@ -3,7 +3,8 @@ import AppKit
 // Dev helper: `WatermelonPomodoro --snapshot out.png` renders the widget to an image and exits.
 if let i = CommandLine.arguments.firstIndex(of: "--snapshot"), i + 1 < CommandLine.arguments.count {
     let seeds = CommandLine.arguments.contains("--seeds")
-    MainActor.assumeIsolated { Snapshot.write(to: CommandLine.arguments[i + 1], seeds: seeds) }
+    let minutes = CommandLine.arguments.firstIndex(of: "--minutes").flatMap { Int(CommandLine.arguments[$0 + 1]) } ?? 0
+    MainActor.assumeIsolated { Snapshot.write(to: CommandLine.arguments[i + 1], seeds: seeds, minutes: minutes) }
     exit(0)
 }
 

@@ -8,8 +8,9 @@ A tiny, hand-drawn pomodoro timer for macOS that floats on top of every app.
 
 - Floats above all windows, on every desktop, even over full-screen apps
 - Drag it anywhere, and it remembers where you left it
-- Starts at **00:00**. **– / +** change the time in 15-minute steps, up to 180 minutes (even while it's running)
-- **▶ / ❚❚** to start and pause
+- Starts at **00:00**. **– / +** change the time in 15-minute steps, up to 3 hours (even while it's running)
+- Shows `MM:SS` under an hour and `HH:MM:SS` from an hour up
+- **– ▶ ❚❚ +** sit in one fixed row, so nothing moves around as the time changes
 - The watermelon sways while you focus. When time's up it shakes, hops and pops seeds 🎉
 - Right-click for presets, **Reset**, **Preview celebration** and **Quit**
 

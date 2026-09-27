@@ -29,7 +29,7 @@ To keep it around, drag `build/Watermelon.app` into your **Applications** folder
 
 All the art is hand-drawn. The layers in `PNGs/` are full 1000 × 560 canvases (the Figma frame).
 `scripts/export_art.swift` turns them into the images the app uses in `Resources/Art/`:
-it copies the backgrounds, crops each digit and control tight, and makes their strokes a bit bolder.
+it smooths the border to an even rounded outline (keeping the crayon texture), fits the backgrounds to it, crops each digit and control tight, and makes their strokes a bit bolder.
 After changing any drawing, run:
 
 ```bash

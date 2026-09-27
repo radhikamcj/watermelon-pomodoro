@@ -7,45 +7,28 @@ enum TimerMode {
 
     var label: String {
         switch self {
-        case .focus: return "focus time"
-        case .rest: return "snack break"
+        case .focus: return "Focus"
+        case .rest: return "Break"
         }
     }
 }
 
 final class PomodoroTimer: ObservableObject {
+    /// – / + change the time by this much, between 0 and `maxSeconds`.
+    static let stepSeconds = 15 * 60
+    static let maxSeconds = 180 * 60
+
     @Published private(set) var mode: TimerMode = .focus
-    @Published private(set) var remaining: Int
+    @Published private(set) var remaining = 0
     @Published private(set) var isRunning = false
     @Published private(set) var slicesToday = 0
-    @Published private(set) var justFinished = false
-
-    @Published private(set) var focusMinutes: Int {
-        didSet { UserDefaults.standard.set(focusMinutes, forKey: "focusMinutes") }
-    }
-    @Published private(set) var restMinutes: Int {
-        didSet { UserDefaults.standard.set(restMinutes, forKey: "restMinutes") }
-    }
+    /// Bumped every time a session ends, to kick off the celebration.
+    @Published private(set) var celebrationCount = 0
 
     private var ticker: Timer?
     private var endDate: Date?
-
-    init() {
-        let defaults = UserDefaults.standard
-        let focus = defaults.integer(forKey: "focusMinutes")
-        let rest = defaults.integer(forKey: "restMinutes")
-        focusMinutes = focus > 0 ? focus : 25
-        restMinutes = rest > 0 ? rest : 5
-        remaining = (focus > 0 ? focus : 25) * 60
-    }
-
-    var currentMinutes: Int { mode == .focus ? focusMinutes : restMinutes }
-
-    var progress: Double {
-        let total = Double(currentMinutes * 60)
-        guard total > 0 else { return 0 }
-        return 1 - Double(remaining) / total
-    }
+    /// What the timer was last set to, so Reset can go back to it.
+    private var setSeconds = 0
 
     var timeText: String {
         String(format: "%02d:%02d", remaining / 60, remaining % 60)
@@ -53,14 +36,10 @@ final class PomodoroTimer: ObservableObject {
 
     // MARK: - Controls
 
-    func toggle() {
-        isRunning ? pause() : start()
-    }
+    var canStart: Bool { !isRunning && remaining > 0 }
 
     func start() {
-        guard !isRunning else { return }
-        justFinished = false
-        if remaining <= 0 { remaining = currentMinutes * 60 }
+        guard canStart else { return }
         endDate = Date().addingTimeInterval(TimeInterval(remaining))
         isRunning = true
         let t = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in self?.tick() }
@@ -76,33 +55,38 @@ final class PomodoroTimer: ObservableObject {
 
     func reset() {
         pause()
-        justFinished = false
-        remaining = currentMinutes * 60
-    }
-
-    func switchMode(to newMode: TimerMode) {
-        pause()
-        justFinished = false
-        mode = newMode
-        remaining = currentMinutes * 60
-    }
-
-    /// Change the length of the current mode. Only allowed while paused.
-    func adjust(up: Bool) {
-        guard !isRunning else { return }
-        switch mode {
-        case .focus:
-            let step = 5
-            focusMinutes = min(120, max(5, focusMinutes + (up ? step : -step)))
-        case .rest:
-            restMinutes = min(60, max(1, restMinutes + (up ? 1 : -1)))
-        }
-        remaining = currentMinutes * 60
+        remaining = setSeconds
     }
 
     func setMinutes(_ minutes: Int, for target: TimerMode) {
-        if target == .focus { focusMinutes = minutes } else { restMinutes = minutes }
-        switchMode(to: target)
+        pause()
+        mode = target
+        setSeconds = minutes * 60
+        remaining = setSeconds
+    }
+
+    var canAdjustDown: Bool {
+        // While running, only take off time if there's more than a step left, so it doesn't end abruptly.
+        isRunning ? remaining > Self.stepSeconds : remaining > 0
+    }
+
+    var canAdjustUp: Bool {
+        remaining < Self.maxSeconds
+    }
+
+    /// – / + : move the time by 15 minutes, from 00:00 up to 180:00.
+    func adjust(up: Bool) {
+        guard up ? canAdjustUp : canAdjustDown else { return }
+        let old = remaining
+        remaining = up
+            ? min(Self.maxSeconds, remaining + Self.stepSeconds)
+            : max(0, remaining - Self.stepSeconds)
+
+        if isRunning, let endDate {
+            self.endDate = endDate.addingTimeInterval(TimeInterval(remaining - old))
+        } else {
+            setSeconds = remaining
+        }
     }
 
     // MARK: - Ticking
@@ -114,16 +98,18 @@ final class PomodoroTimer: ObservableObject {
         if left == 0 { finish() }
     }
 
+    /// Shake + seeds + chime, without touching the timer.
+    func celebrate() {
+        NSSound(named: "Glass")?.play()
+        celebrationCount += 1
+    }
+
     private func finish() {
         pause()
-        NSSound(named: "Glass")?.play()
-        if mode == .focus {
-            slicesToday += 1
-            mode = .rest
-        } else {
-            mode = .focus
-        }
-        remaining = currentMinutes * 60
-        justFinished = true
+        if mode == .focus { slicesToday += 1 }
+        mode = .focus
+        setSeconds = 0
+        remaining = 0
+        celebrate()
     }
 }

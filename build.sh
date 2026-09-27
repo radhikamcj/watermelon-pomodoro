@@ -18,6 +18,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp .build/release/WatermelonPomodoro "$APP/Contents/MacOS/Watermelon"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+cp -R Resources/Art "$APP/Contents/Resources/Art"
 codesign --force --sign - "$APP" >/dev/null
 
 echo "Built $APP"

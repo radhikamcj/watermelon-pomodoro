@@ -5,17 +5,20 @@ import SwiftUI
 enum Snapshot {
     /// With `seeds`, also draws one frame of the celebration, laid out exactly like the seed overlay window.
     @MainActor
-    static func write(to path: String, seeds: Bool = false, minutes: Int = 0) {
+    static func write(to path: String, seeds: Bool = false, minutes: Int = 0, collapsed: Bool = false) {
         let timer = PomodoroTimer()
         timer.setMinutes(minutes, for: .focus)
         let margin = SeedPanel.margin
-        let origin = CGPoint(x: margin + Layout.seedOrigin.x, y: margin + Layout.seedOrigin.y)
+        let seedOrigin = Layout.seedOrigin(collapsed: collapsed)
+        let origin = CGPoint(x: margin + seedOrigin.x, y: margin + seedOrigin.y)
         let content = ZStack(alignment: .topLeading) {
             WidgetView().environmentObject(timer).environmentObject(LoginItem())
+                .environmentObject(WidgetState(collapsed: collapsed))
                 .padding(seeds ? margin : 0)
             if seeds {
                 SeedBurstView(seeds: Seed.bursts(from: origin), startDate: Date().addingTimeInterval(-0.3))
-                    .frame(width: Layout.windowSize.width + margin * 2, height: Layout.windowSize.height + margin * 2)
+                    .frame(width: Layout.windowSize(collapsed: collapsed).width + margin * 2,
+                           height: Layout.windowSize(collapsed: collapsed).height + margin * 2)
             }
         }
         let renderer = ImageRenderer(content: content)

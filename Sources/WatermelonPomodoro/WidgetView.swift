@@ -81,10 +81,26 @@ enum Layout {
     /// Middle of the watermelon's red flesh once it's turned upright, in design pixels.
     static let fleshCenter = CGPoint(x: 134, y: 256)
 
+    /// The part of the canvas kept on screen when collapsed: the watermelon plus room to sway,
+    /// shake and hop (the rind reaches x ~ -73; mid-shake it grows ~16%). Multiples of 4 so it
+    /// lands on whole points and the window doesn't creep from rounding as it collapses/expands.
+    static let collapsedRect = CGRect(x: -116, y: -32, width: 412, height: 576)
+
+    static func windowSize(collapsed: Bool) -> CGSize {
+        collapsed ? CGSize(width: collapsedRect.width * scale, height: collapsedRect.height * scale) : windowSize
+    }
+
+    /// Where the canvas's top-left corner sits in the window, in points.
+    static func canvasOrigin(collapsed: Bool) -> CGPoint {
+        collapsed
+            ? CGPoint(x: -collapsedRect.minX * scale, y: -collapsedRect.minY * scale)
+            : CGPoint(x: shadowPadding + leftOverhang, y: shadowPadding)
+    }
+
     /// Where seeds pop from, in points from the window's top-left corner.
-    static var seedOrigin: CGPoint {
-        CGPoint(x: shadowPadding + leftOverhang + fleshCenter.x * scale,
-                y: shadowPadding + fleshCenter.y * scale)
+    static func seedOrigin(collapsed: Bool) -> CGPoint {
+        let origin = canvasOrigin(collapsed: collapsed)
+        return CGPoint(x: origin.x + fleshCenter.x * scale, y: origin.y + fleshCenter.y * scale)
     }
 }
 
@@ -93,9 +109,13 @@ enum Layout {
 struct WidgetView: View {
     @EnvironmentObject private var timer: PomodoroTimer
     @EnvironmentObject private var loginItem: LoginItem
+    @EnvironmentObject private var state: WidgetState
     @State private var dragStart: (mouse: NSPoint, origin: NSPoint)?
 
     var body: some View {
+        let origin = Layout.canvasOrigin(collapsed: state.isCollapsed)
+        let window = Layout.windowSize(collapsed: state.isCollapsed)
+
         ZStack(alignment: .topLeading) {
             // The background is what you grab to drag and right-click; everything drawn
             // on top of it (except the buttons) lets the mouse fall through to it.
@@ -105,19 +125,40 @@ struct WidgetView: View {
                 layer("pink_bg")
             }
             .contentShape(Rectangle())
-            .gesture(windowDrag)
+            .gesture(windowDrag())
             .contextMenu { menu }
+            .card(visible: state.cardVisible)
 
-            layer("border").allowsHitTesting(false)
+            layer("border").allowsHitTesting(false).card(visible: state.cardVisible)
             watermelon
-            time.position(Layout.timeCenter)
-            controls.position(Layout.controlsCenter)
+            watermelonHitArea
+            time.position(Layout.timeCenter).card(visible: state.cardVisible)
+            controls.position(Layout.controlsCenter).card(visible: state.cardVisible)
         }
         .frame(width: Layout.canvas.width, height: Layout.canvas.height, alignment: .topLeading)
         .scaleEffect(Layout.scale, anchor: .topLeading)
         .frame(width: Layout.widgetSize.width, height: Layout.widgetSize.height, alignment: .topLeading)
-        .padding(Layout.shadowPadding)
-        .padding(.leading, Layout.leftOverhang)
+        // Collapsed, the window shrinks around the watermelon and the canvas shifts so the
+        // watermelon stays on the same spot on screen.
+        .offset(x: origin.x, y: origin.y)
+        .frame(width: window.width, height: window.height, alignment: .topLeading)
+        // Collapsed, the whole (small) window is the watermelon's click target; an almost
+        // invisible fill keeps macOS from passing clicks through its transparent corners.
+        .background(state.isCollapsed ? Color.black.opacity(0.01) : Color.clear)
+    }
+
+    /// Clicking the watermelon (the slice's own outline, not its square frame) tucks the
+    /// widget away or brings it back; dragging it moves the widget as usual.
+    private var watermelonHitArea: some View {
+        let shape = RindShape.outer
+        return Color.clear
+            .frame(width: shape.size.width, height: shape.size.height)
+            .contentShape(shape)
+            .onTapGesture { state.toggle() }
+            .gesture(windowDrag(minimumDistance: 3))
+            .contextMenu { menu }
+            .help(state.isCollapsed ? "Show timer" : "Tuck away")
+            .offset(x: shape.origin.x, y: shape.origin.y)
     }
 
     private func layer(_ name: String) -> some View {
@@ -244,8 +285,8 @@ struct WidgetView: View {
 
     // Moves the floating window by tracking the mouse in screen coordinates,
     // so the window moving under the cursor doesn't feed back into the drag.
-    private var windowDrag: some Gesture {
-        DragGesture(minimumDistance: 1, coordinateSpace: .global)
+    private func windowDrag(minimumDistance: CGFloat = 1) -> some Gesture {
+        DragGesture(minimumDistance: minimumDistance, coordinateSpace: .global)
             .onChanged { _ in
                 guard let window = NSApp.windows.first(where: { $0 is FloatingPanel }) else { return }
                 let mouse = NSEvent.mouseLocation
@@ -270,10 +311,20 @@ struct WidgetView: View {
         Button("☁️  Break 5 min") { timer.setMinutes(5, for: .rest) }
         Button("☁️  Break 15 min") { timer.setMinutes(15, for: .rest) }
         Divider()
+        Button(state.isCollapsed ? "Show timer" : "Tuck away") { state.toggle() }
         Button("Reset") { timer.reset() }
         Toggle("Open at login", isOn: Binding(get: { loginItem.isEnabled }, set: { loginItem.setEnabled($0) }))
         Button("Preview celebration 🎉") { timer.celebrate() }
         Button("Quit Watermelon") { NSApp.terminate(nil) }
+    }
+}
+
+extension View {
+    /// The timer card's parts fade and shrink toward the watermelon when it's tucked away.
+    func card(visible: Bool) -> some View {
+        opacity(visible ? 1 : 0)
+            .scaleEffect(visible ? 1 : 0.85, anchor: Layout.watermelonAnchor)
+            .allowsHitTesting(visible)
     }
 }
 

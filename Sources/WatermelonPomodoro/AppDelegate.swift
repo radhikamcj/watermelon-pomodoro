@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var seedPanel: SeedPanel!
     private let timer = PomodoroTimer()
     private let loginItem = LoginItem()
+    private let state = WidgetState()
     private var celebrationWatch: AnyCancellable?
     private var hideSeeds: DispatchWorkItem?
 
@@ -14,8 +15,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let size = Layout.windowSize
         panel = FloatingPanel(contentRect: NSRect(origin: .zero, size: size))
 
-        let hosting = FirstClickHostingView(rootView: WidgetView().environmentObject(timer).environmentObject(loginItem))
+        let hosting = FirstClickHostingView(rootView: WidgetView().environmentObject(timer).environmentObject(loginItem).environmentObject(state))
         hosting.frame = NSRect(origin: .zero, size: size)
+        // The window's size is set here (and when collapsing); don't let SwiftUI push it back.
+        hosting.sizingOptions = []
         panel.contentView = hosting
 
         // Remember where the widget was dragged to between launches (position only; size comes from the art).
@@ -25,12 +28,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             placeInTopRightCorner()
         }
         panel.setFrameAutosaveName("WatermelonWidget")
+        panel.onCollapsedClick = { [weak self] in self?.state.expand() }
         panel.orderFrontRegardless()
 
         seedPanel = SeedPanel()
+        state.onLayoutChange = { [weak self] collapsed in self?.resizePanel(collapsed: collapsed) }
         celebrationWatch = timer.$celebrationCount
             .dropFirst()
             .sink { [weak self] _ in self?.popSeeds() }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        // Save the expanded frame, so the widget comes back where it was, at full size.
+        if state.isCollapsed { resizePanel(collapsed: false) }
+        panel.saveFrame(usingName: "WatermelonWidget")
+    }
+
+    /// Resizes the window for the collapsed or expanded widget, keeping the canvas (and so
+    /// the watermelon) fixed on screen.
+    private func resizePanel(collapsed: Bool) {
+        let from = Layout.canvasOrigin(collapsed: !collapsed), to = Layout.canvasOrigin(collapsed: collapsed)
+        let size = Layout.windowSize(collapsed: collapsed)
+        let frame = panel.frame
+        // AppKit frames grow upward from the bottom-left; work from the top-left corner instead.
+        let left = frame.minX + from.x - to.x
+        let top = frame.maxY - from.y + to.y
+        panel.setFrame(NSRect(x: left, y: top - size.height, width: size.width, height: size.height), display: true)
+        panel.isCollapsed = collapsed
     }
 
     private func placeInTopRightCorner() {
@@ -47,7 +71,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let margin = SeedPanel.margin
         seedPanel.setFrame(panel.frame.insetBy(dx: -margin, dy: -margin), display: false)
 
-        let origin = CGPoint(x: margin + Layout.seedOrigin.x, y: margin + Layout.seedOrigin.y)
+        let seedOrigin = Layout.seedOrigin(collapsed: state.isCollapsed)
+        let origin = CGPoint(x: margin + seedOrigin.x, y: margin + seedOrigin.y)
         let seeds = Seed.bursts(from: origin)
         let hosting = NSHostingView(rootView: SeedBurstView(seeds: seeds, startDate: Date()))
         // Don't let SwiftUI resize the overlay to fit; it must line up exactly with the widget.
@@ -87,6 +112,26 @@ final class FloatingPanel: NSPanel {
 
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
+
+    /// While tucked away the window is just the watermelon, and it handles the mouse itself:
+    /// a click brings the timer back, a drag moves it. (Right-click still opens the menu.)
+    var isCollapsed = false
+    var onCollapsedClick: (() -> Void)?
+
+    override func sendEvent(_ event: NSEvent) {
+        guard isCollapsed, event.type == .leftMouseDown else {
+            super.sendEvent(event)
+            return
+        }
+        let start = NSEvent.mouseLocation, origin = frame.origin
+        var dragged = false
+        while let next = nextEvent(matching: [.leftMouseDragged, .leftMouseUp]), next.type != .leftMouseUp {
+            let now = NSEvent.mouseLocation
+            if !dragged, hypot(now.x - start.x, now.y - start.y) > 3 { dragged = true }
+            if dragged { setFrameOrigin(NSPoint(x: origin.x + now.x - start.x, y: origin.y + now.y - start.y)) }
+        }
+        if !dragged { onCollapsedClick?() }
+    }
 }
 
 /// Transparent, click-through window just above the widget where the seeds fly.

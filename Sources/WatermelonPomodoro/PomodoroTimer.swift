@@ -32,8 +32,6 @@ final class PomodoroTimer: ObservableObject {
 
     private var ticker: Timer?
     private var endDate: Date?
-    /// What the timer was last set to, so Reset can go back to it.
-    private var setSeconds = 0
     /// The current session's full length, including any – / + along the way.
     private var sessionSeconds = 0 {
         didSet { updateBites() }
@@ -66,18 +64,19 @@ final class PomodoroTimer: ObservableObject {
         isRunning = false
     }
 
+    /// Back to 00:00 with a whole watermelon.
     func reset() {
         pause()
-        remaining = setSeconds
-        sessionSeconds = setSeconds
+        mode = .focus
+        remaining = 0
+        sessionSeconds = 0
     }
 
     func setMinutes(_ minutes: Int, for target: TimerMode) {
         pause()
         mode = target
-        setSeconds = minutes * 60
-        remaining = setSeconds
-        sessionSeconds = setSeconds
+        remaining = minutes * 60
+        sessionSeconds = remaining
     }
 
     var canAdjustDown: Bool {
@@ -99,8 +98,6 @@ final class PomodoroTimer: ObservableObject {
 
         if isRunning, let endDate {
             self.endDate = endDate.addingTimeInterval(TimeInterval(remaining - old))
-        } else {
-            setSeconds = remaining
         }
         sessionSeconds += remaining - old
     }
@@ -132,7 +129,6 @@ final class PomodoroTimer: ObservableObject {
         pause()
         if mode == .focus { slicesToday += 1 }
         mode = .focus
-        setSeconds = 0
         remaining = 0
         sessionSeconds = 0
         celebrate()

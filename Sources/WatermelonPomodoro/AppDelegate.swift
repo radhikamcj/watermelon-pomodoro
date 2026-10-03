@@ -36,13 +36,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         state.onLayoutChange = { [weak self] collapsed in self?.resizePanel(collapsed: collapsed) }
         celebrationWatch = timer.$celebrationCount
             .dropFirst()
-            .sink { [weak self] _ in self?.popSeeds(from: Layout.fleshCenter) }
+            .sink { [weak self] _ in
+                guard let self else { return }
+                self.popSeeds(from: Layout.burstCenter(collapsed: self.state.isCollapsed))
+            }
         // A little pop of seeds from each new bite.
         biteWatch = timer.$bites
             .scan((0, 0)) { ($0.1, $1) }
             .filter { old, new in new > old }
             .sink { [weak self] _, bites in
-                self?.popSeeds(from: Layout.biteCenters[bites - 1], volleys: 1, perVolley: 5)
+                guard let self else { return }
+                // Tucked away there's no slice to bite, so the seeds come from the whole watermelon.
+                let point = self.state.isCollapsed ? Layout.wholeCenter : Layout.biteCenters[bites - 1]
+                self.popSeeds(from: point, volleys: 1, perVolley: 5)
             }
     }
 

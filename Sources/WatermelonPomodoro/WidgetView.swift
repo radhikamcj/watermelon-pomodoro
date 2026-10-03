@@ -89,10 +89,26 @@ enum Layout {
     static let signToPlayPause: CGFloat = 40
     static let playToPause: CGFloat = 50
 
-    /// The part of the canvas kept on screen when collapsed: the upright watermelon (x -86...260,
-    /// y 59...504) plus room to sway, shake and hop (it grows ~16%). Multiples of 4 so it lands on
-    /// whole points and the window doesn't creep from rounding as it collapses/expands.
-    static let collapsedRect = CGRect(x: -128, y: -20, width: 412, height: 564)
+    // The whole watermelon shown while tucked away: Full-watermelon.png cropped to 421 x 502, drawn
+    // at 85% and turned on its side with the stem dot facing left, near where the slice sits.
+    static let wholeSize = CGSize(width: 421 * 0.85, height: 502 * 0.85)
+    static let wholeCenter = CGPoint(x: 100, y: 281)
+    static let wholeAngle: Double = -90
+    static var wholeAnchor: UnitPoint {
+        UnitPoint(x: wholeCenter.x / canvas.width, y: wholeCenter.y / canvas.height)
+    }
+    /// What the watermelon sways and shakes around: the slice, or the whole one when tucked away.
+    static func motionAnchor(collapsed: Bool) -> UnitPoint { collapsed ? wholeAnchor : watermelonAnchor }
+    /// Where the celebration pops from: the slice's flesh, or the whole watermelon's middle.
+    static func burstCenter(collapsed: Bool) -> CGPoint { collapsed ? wholeCenter : fleshCenter }
+
+    /// The part of the canvas kept on screen when collapsed: the whole watermelon on its side
+    /// (x -113...313, y 102...460) plus room to sway, shake and hop (it grows ~16%). Multiples of 4
+    /// so it lands on whole points and the window doesn't creep from rounding as it collapses/expands.
+    static let collapsedRect = CGRect(x: -152, y: 28, width: 504, height: 464)
+
+    /// The card's left edge (base.png starts at x = 24): it retracts into here when tucked away.
+    static let baseLeftEdge = UnitPoint(x: 24 / canvas.width, y: 0.5)
 
     static func windowSize(collapsed: Bool) -> CGSize {
         collapsed ? CGSize(width: collapsedRect.width * scale, height: collapsedRect.height * scale) : windowSize
@@ -132,12 +148,12 @@ struct WidgetView: View {
                 .contentShape(Rectangle())
             .gesture(windowDrag())
             .contextMenu { menu }
-            .card(visible: state.cardVisible)
+            .retractingLeft(visible: state.cardVisible)
 
             watermelon
             watermelonHitArea
-            time.position(Layout.timeCenter).card(visible: state.cardVisible)
-            controls.position(Layout.controlsCenter).card(visible: state.cardVisible)
+            time.position(Layout.timeCenter).popping(visible: state.cardVisible)
+            controls.position(Layout.controlsCenter).popping(visible: state.cardVisible)
         }
         .frame(width: Layout.canvas.width, height: Layout.canvas.height, alignment: .topLeading)
         .scaleEffect(Layout.scale, anchor: .topLeading)
@@ -172,43 +188,46 @@ struct WidgetView: View {
 
     // MARK: Watermelon
 
-    /// The watermelon, with one more bite out of it for every half hour of the session.
+    /// The slice (with its bites), or the whole watermelon while tucked away; they sway and shake together.
     private var watermelon: some View {
-        Image(nsImage: Art.image(timer.bites == 0 ? "watermelon" : "watermelon_bite\(timer.bites)"))
-            .resizable()
-            .interpolation(.high)
-            .frame(width: Layout.watermelonSize.width, height: Layout.watermelonSize.height)
-            .rotationEffect(.degrees(Layout.watermelonAngle))
-            .position(Layout.watermelonCenter)
-            .frame(width: Layout.canvas.width, height: Layout.canvas.height, alignment: .topLeading)
-            // A quick chomp each time a bite is taken.
-            .keyframeAnimator(initialValue: Shake(), trigger: timer.bites) { content, chomp in
-                content
-                    .rotationEffect(.degrees(chomp.angle), anchor: Layout.watermelonAnchor)
-                    .scaleEffect(chomp.scale, anchor: Layout.watermelonAnchor)
-            } keyframes: { _ in
-                KeyframeTrack(\.scale) {
-                    CubicKeyframe(0.93, duration: 0.08)
-                    SpringKeyframe(1.05, duration: 0.15)
-                    SpringKeyframe(1.0, duration: 0.3)
-                }
-                KeyframeTrack(\.angle) {
-                    CubicKeyframe(-4, duration: 0.08)
-                    CubicKeyframe(3, duration: 0.12)
-                    SpringKeyframe(0, duration: 0.3)
-                }
-            }
+        let anchor = Layout.motionAnchor(collapsed: state.isCollapsed)
+        return ZStack(alignment: .topLeading) {
+            // Tucked away, the slice spins half a turn counterclockwise and turns into the whole
+            // watermelon, which carries on spinning into place (and the reverse on the way back).
+            let shown = state.cardVisible
+            let offset = Layout.watermelonCenter.x - Layout.wholeCenter.x
+            slice
+                .rotationEffect(.degrees(shown ? 0 : -180), anchor: Layout.watermelonAnchor)
+                .scaleEffect(shown ? 1 : 0.55, anchor: Layout.watermelonAnchor)
+                .offset(x: shown ? 0 : -offset)
+                .animation(Motion.spin, value: shown)
+                .opacity(shown ? 1 : 0)
+                .animation(Motion.crossfade, value: shown)
+            Image(nsImage: Art.image("watermelon_whole"))
+                .resizable()
+                .interpolation(.high)
+                .frame(width: Layout.wholeSize.width, height: Layout.wholeSize.height)
+                .rotationEffect(.degrees(Layout.wholeAngle))
+                .position(Layout.wholeCenter)
+                .frame(width: Layout.canvas.width, height: Layout.canvas.height, alignment: .topLeading)
+                .rotationEffect(.degrees(shown ? 180 : 0), anchor: Layout.wholeAnchor)
+                .scaleEffect(shown ? 0.5 : 1, anchor: Layout.wholeAnchor)
+                .offset(x: shown ? offset : 0)
+                .animation(Motion.spin, value: shown)
+                .opacity(shown ? 0 : 1)
+                .animation(Motion.crossfade, value: shown)
+        }
             // Gentle sway while focusing.
             .phaseAnimator([-2.5, 2.5]) { content, angle in
-                content.rotationEffect(.degrees(timer.isRunning ? angle : 0), anchor: Layout.watermelonAnchor)
+                content.rotationEffect(.degrees(timer.isRunning ? angle : 0), anchor: anchor)
             } animation: { _ in
                 .easeInOut(duration: 1.4)
             }
             // Big happy shake when a session ends.
             .keyframeAnimator(initialValue: Shake(), trigger: timer.celebrationCount) { content, shake in
                 content
-                    .rotationEffect(.degrees(shake.angle), anchor: Layout.watermelonAnchor)
-                    .scaleEffect(shake.scale, anchor: Layout.watermelonAnchor)
+                    .rotationEffect(.degrees(shake.angle), anchor: anchor)
+                    .scaleEffect(shake.scale, anchor: anchor)
                     .offset(y: shake.lift)
             } keyframes: { _ in
                 KeyframeTrack(\.angle) {
@@ -243,6 +262,34 @@ struct WidgetView: View {
                 }
             }
             .allowsHitTesting(false)
+    }
+
+    /// The upright slice, with one more bite out of it for every half hour of the session.
+    private var slice: some View {
+        Image(nsImage: Art.image(timer.bites == 0 ? "watermelon" : "watermelon_bite\(timer.bites)"))
+            .resizable()
+            .interpolation(.high)
+            .frame(width: Layout.watermelonSize.width, height: Layout.watermelonSize.height)
+            .rotationEffect(.degrees(Layout.watermelonAngle))
+            .position(Layout.watermelonCenter)
+            .frame(width: Layout.canvas.width, height: Layout.canvas.height, alignment: .topLeading)
+            // A quick chomp each time a bite is taken.
+            .keyframeAnimator(initialValue: Shake(), trigger: timer.bites) { content, chomp in
+                content
+                    .rotationEffect(.degrees(chomp.angle), anchor: Layout.watermelonAnchor)
+                    .scaleEffect(chomp.scale, anchor: Layout.watermelonAnchor)
+            } keyframes: { _ in
+                KeyframeTrack(\.scale) {
+                    CubicKeyframe(0.93, duration: 0.08)
+                    SpringKeyframe(1.05, duration: 0.15)
+                    SpringKeyframe(1.0, duration: 0.3)
+                }
+                KeyframeTrack(\.angle) {
+                    CubicKeyframe(-4, duration: 0.08)
+                    CubicKeyframe(3, duration: 0.12)
+                    SpringKeyframe(0, duration: 0.3)
+                }
+            }
     }
 
     // MARK: Time
@@ -327,11 +374,33 @@ struct WidgetView: View {
     }
 }
 
+/// Timing for tucking the widget away and bringing it back (one is the other in reverse).
+enum Motion {
+    /// The watermelon's spin: springy, so it overshoots and wobbles into place.
+    static let spin = Animation.spring(response: 0.55, dampingFraction: 0.55)
+    /// The slice and whole watermelon trade places partway through the spin.
+    static let crossfade = Animation.easeInOut(duration: 0.2).delay(0.1)
+    /// How long a collapse takes before the window shrinks around the watermelon.
+    static let collapseDuration = 0.6
+}
+
 extension View {
-    /// The timer card's parts fade and shrink toward the watermelon when it's tucked away.
-    func card(visible: Bool) -> some View {
-        opacity(visible ? 1 : 0)
-            .scaleEffect(visible ? 1 : 0.85, anchor: Layout.watermelonAnchor)
+    /// The card retracting into its left edge (squashing a little) when tucked away, and springing
+    /// back out to the right, overshooting a touch, when it returns.
+    func retractingLeft(visible: Bool) -> some View {
+        scaleEffect(x: visible ? 1 : 0.03, y: visible ? 1 : 0.8, anchor: Layout.baseLeftEdge)
+            .opacity(visible ? 1 : 0)
+            .animation(visible ? .spring(response: 0.5, dampingFraction: 0.6).delay(0.05)
+                               : .spring(response: 0.4, dampingFraction: 0.85).delay(0.06), value: visible)
+            .allowsHitTesting(visible)
+    }
+
+    /// The time and controls: first to blink out on the way in, last to pop back on the way out.
+    func popping(visible: Bool) -> some View {
+        scaleEffect(visible ? 1 : 0.5)
+            .opacity(visible ? 1 : 0)
+            .animation(visible ? .spring(response: 0.35, dampingFraction: 0.55).delay(0.3)
+                               : .easeIn(duration: 0.14), value: visible)
             .allowsHitTesting(visible)
     }
 }

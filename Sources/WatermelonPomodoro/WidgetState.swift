@@ -11,11 +11,10 @@ final class WidgetState: ObservableObject {
     }
     /// Resizes the window to match; set by the app delegate.
     var onLayoutChange: ((Bool) -> Void)?
-    /// Drives the card's fade/shrink animation.
+    /// Drives the collapse / expand animation (each part animates itself; see `Motion`).
     @Published private(set) var cardVisible: Bool
 
     private var animating = false
-    private static let fadeOut = 0.18
 
     init(collapsed: Bool = false) {
         isCollapsed = collapsed
@@ -29,8 +28,9 @@ final class WidgetState: ObservableObject {
     func collapse() {
         guard !isCollapsed, !animating else { return }
         animating = true
-        withAnimation(.easeIn(duration: Self.fadeOut)) { cardVisible = false }
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.fadeOut) {
+        cardVisible = false
+        // Shrink the window once the card has retracted and the whole watermelon has spun in.
+        DispatchQueue.main.asyncAfter(deadline: .now() + Motion.collapseDuration) {
             self.isCollapsed = true
             self.animating = false
         }
@@ -38,9 +38,12 @@ final class WidgetState: ObservableObject {
 
     func expand() {
         guard isCollapsed, !animating else { return }
+        animating = true
+        // Grow the window first, then play the collapse in reverse inside it.
         isCollapsed = false
         DispatchQueue.main.async {
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) { self.cardVisible = true }
+            self.cardVisible = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + Motion.collapseDuration) { self.animating = false }
         }
     }
 }

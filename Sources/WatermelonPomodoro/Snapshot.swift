@@ -9,7 +9,7 @@ enum Snapshot {
         let timer = PomodoroTimer()
         timer.preview(total: minutes, elapsed: elapsed)
         let margin = SeedPanel.margin
-        let start = Layout.windowPoint(Layout.fleshCenter, collapsed: collapsed)
+        let start = Layout.windowPoint(Layout.burstCenter(collapsed: collapsed), collapsed: collapsed)
         let origin = CGPoint(x: margin + start.x, y: margin + start.y)
         let content = ZStack(alignment: .topLeading) {
             WidgetView().environmentObject(timer).environmentObject(LoginItem())

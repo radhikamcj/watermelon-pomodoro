@@ -175,6 +175,9 @@ save(load("New watermelon").cropping(to: watermelonCrop)!, "watermelon")
 for (k, name) in ["1 bite", "2 bites", "3 bites"].enumerated() {
     save(load(name).cropping(to: watermelonCrop)!, "watermelon_bite\(k + 1)")
 }
+// The whole watermelon shown while the widget is tucked away, cropped to the fruit (with a little
+// room) from its 560 x 1000 canvas. Keep in sync with Layout.wholeSize.
+save(load("Full-watermelon").cropping(to: CGRect(x: 84, y: 157, width: 421, height: 502))!, "watermelon_whole")
 
 save(playGlyph(), "play")
 

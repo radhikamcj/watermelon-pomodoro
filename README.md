@@ -12,7 +12,7 @@ A tiny, hand-drawn pomodoro timer for macOS that floats on top of every app.
 - Shows `MM:SS` under an hour and `HH:MM:SS` from an hour up
 - **– ▶ ❚❚ +** sit in one fixed row, so nothing moves around as the time changes
 - The watermelon sways while you focus and loses a bite every half hour (popping a few seeds each time). When time's up it shakes, hops and pops seeds 🎉
-- Click the watermelon to tuck the widget down to just the watermelon; click it again to bring the timer back (it keeps running, and you can drag it either way)
+- Click the watermelon to tuck the widget away: the card retracts to the left and the slice spins into a whole watermelon. Click it again to bring the timer back (it keeps running, and you can drag it either way)
 - Right-click for presets, **Reset**, **Open at login**, **Preview celebration** and **Quit**
 
 ## Build & run

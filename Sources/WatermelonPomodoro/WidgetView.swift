@@ -89,10 +89,12 @@ enum Layout {
     static let signToPlayPause: CGFloat = 40
     static let playToPause: CGFloat = 50
 
-    // The whole watermelon shown while tucked away: Full-watermelon.png cropped to 421 x 502, drawn
-    // at 85% and turned on its side with the stem dot facing left, near where the slice sits.
-    static let wholeSize = CGSize(width: 421 * 0.85, height: 502 * 0.85)
-    static let wholeCenter = CGPoint(x: 100, y: 281)
+    // The whole watermelon shown while tucked away: Full-watermelon.png cropped to 421 x 502 (the
+    // fruit itself is 413 wide), turned on its side with the stem dot facing left, and scaled so
+    // it stands as tall as the upright slice (445px, y 59...504) at the same height.
+    static let wholeScale: CGFloat = 445 / 413
+    static let wholeSize = CGSize(width: 421 * wholeScale, height: 502 * wholeScale)
+    static let wholeCenter = CGPoint(x: 110, y: 281.5)
     static let wholeAngle: Double = -90
     static var wholeAnchor: UnitPoint {
         UnitPoint(x: wholeCenter.x / canvas.width, y: wholeCenter.y / canvas.height)
@@ -103,9 +105,9 @@ enum Layout {
     static func burstCenter(collapsed: Bool) -> CGPoint { collapsed ? wholeCenter : fleshCenter }
 
     /// The part of the canvas kept on screen when collapsed: the whole watermelon on its side
-    /// (x -113...313, y 102...460) plus room to sway, shake and hop (it grows ~16%). Multiples of 4
+    /// (x -156...376, y 59...504) plus room to sway, shake and hop (it grows ~16%). Multiples of 4
     /// so it lands on whole points and the window doesn't creep from rounding as it collapses/expands.
-    static let collapsedRect = CGRect(x: -152, y: 28, width: 504, height: 464)
+    static let collapsedRect = CGRect(x: -200, y: -20, width: 620, height: 564)
 
     /// The card's left edge (base.png starts at x = 24): it retracts into here when tucked away.
     static let baseLeftEdge = UnitPoint(x: 24 / canvas.width, y: 0.5)
@@ -376,8 +378,8 @@ struct WidgetView: View {
 
 /// Timing for tucking the widget away and bringing it back (one is the other in reverse).
 enum Motion {
-    /// The watermelon's spin: springy, so it overshoots and wobbles into place.
-    static let spin = Animation.spring(response: 0.55, dampingFraction: 0.55)
+    /// The watermelon's spin: quick, gliding into place with just a soft settle at the end.
+    static let spin = Animation.spring(response: 0.55, dampingFraction: 0.82)
     /// The slice and whole watermelon trade places partway through the spin.
     static let crossfade = Animation.easeInOut(duration: 0.2).delay(0.1)
     /// How long a collapse takes before the window shrinks around the watermelon.

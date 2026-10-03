@@ -11,7 +11,7 @@ A tiny, hand-drawn pomodoro timer for macOS that floats on top of every app.
 - Starts at **00:00**. **– / +** change the time in 15-minute steps, up to 3 hours (even while it's running)
 - Shows `MM:SS` under an hour and `HH:MM:SS` from an hour up
 - **– ▶ ❚❚ +** sit in one fixed row, so nothing moves around as the time changes
-- The watermelon sways while you focus. When time's up it shakes, hops and pops seeds 🎉
+- The watermelon sways while you focus and loses a bite every half hour (popping a few seeds each time). When time's up it shakes, hops and pops seeds 🎉
 - Click the watermelon to tuck the widget down to just the watermelon; click it again to bring the timer back (it keeps running, and you can drag it either way)
 - Right-click for presets, **Reset**, **Open at login**, **Preview celebration** and **Quit**
 
@@ -32,7 +32,8 @@ or right-click it and turn on **Open at login** so it starts with your Mac.
 
 All the art is hand-drawn. The layers in `PNGs/` are full 1000 × 560 canvases (the Figma frame).
 `scripts/export_art.swift` turns them into the images the app uses in `Resources/Art/`:
-it smooths the border to an even rounded outline (keeping the crayon texture), fits the backgrounds to it, crops each digit and control tight, and makes their strokes a bit bolder.
+`New base.png` becomes the card, `New watermelon.png` and `1 bite` / `2 bites` / `3 bites.png` become the
+watermelon's stages, and each digit and control is cropped tight and made a bit bolder.
 After changing any drawing, run:
 
 ```bash

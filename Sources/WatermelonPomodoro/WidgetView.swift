@@ -42,7 +42,7 @@ enum Layout {
     /// Design pixels -> points. 1000 x 560 art becomes a 250 x 140 widget.
     static let scale: CGFloat = 0.25
     static var widgetSize: CGSize { CGSize(width: canvas.width * scale, height: canvas.height * scale) }
-    /// Room around the art for the soft pink shadow, in points.
+    /// Room around the art for the soft pink glow, in points.
     static let shadowPadding: CGFloat = 18
     /// Extra room on the left: the watermelon's rind hangs past the card's edge (more so mid-shake).
     static let leftOverhang: CGFloat = 24
@@ -50,11 +50,11 @@ enum Layout {
         CGSize(width: widgetSize.width + shadowPadding * 2 + leftOverhang,
                height: widgetSize.height + shadowPadding * 2)
     }
-    /// Average color of pink_bg.png.
-    static let pink = Color(red: 1, green: 0xB0 / 255, blue: 0xB0 / 255)
+    /// Average color of base.png, for the glow around the card.
+    static let glow = Color(red: 0xFE / 255, green: 0x87 / 255, blue: 0x86 / 255)
 
-    // Watermelon, placed as in the Figma frame: the left 469 x 560 of its canvas,
-    // turned 42.44° clockwise so it stands upright. Keep in sync with scripts/export_art.swift.
+    // Watermelon, placed as in the Figma frame: the left 469 x 560 of its canvas, turned 42.44°
+    // clockwise so it stands upright. Keep in sync with scripts/export_art.swift.
     static let watermelonSize = CGSize(width: 469, height: 560)
     static let watermelonCenter = CGPoint(x: 138, y: 279.9)
     static let watermelonAngle: Double = 42.44
@@ -62,15 +62,26 @@ enum Layout {
     static var watermelonAnchor: UnitPoint {
         UnitPoint(x: watermelonCenter.x / canvas.width, y: watermelonCenter.y / canvas.height)
     }
+    /// Takes a point on the watermelon drawing (before it's turned upright) to the canvas.
+    static func upright(_ p: CGPoint) -> CGPoint {
+        let a = watermelonAngle * .pi / 180
+        let dx = p.x - watermelonSize.width / 2, dy = p.y - watermelonSize.height / 2
+        return CGPoint(x: watermelonCenter.x + dx * cos(a) - dy * sin(a),
+                       y: watermelonCenter.y + dx * sin(a) + dy * cos(a))
+    }
+    /// Middle of the red flesh, where the celebration pops from.
+    static let fleshCenter = upright(CGPoint(x: 240, y: 290))
+    /// Where bites 1, 2 and 3 were taken (measured from the drawings), for their pops of seeds.
+    static let biteCenters = [CGPoint(x: 250, y: 252), CGPoint(x: 319, y: 293), CGPoint(x: 139, y: 199)].map(upright)
 
     // Time: sized so the widest format (HH:MM:SS) fits between the watermelon's cut edge
-    // (x ~ 190 at this height) and ~5pt before the border's inner edge (x = 931).
+    // (x ~ 190 at this height) and ~10pt inside the card's right edge (x = 952).
     static let timeCenter = CGPoint(x: 570, y: 185)
     static let glyphScale: CGFloat = 0.7
     /// Every digit gets the same width, like a digital clock, so nothing shifts as seconds tick.
     static let digitSlot: CGFloat = 142
 
-    // Controls: one fixed row  –  ▶  ❚❚  +  that never moves.
+    // Controls: one fixed row  –  ▶  ❚❚  +  that never moves (the watermelon reaches x ~ 256 here).
     static let controlsCenter = CGPoint(x: 570, y: 405)
     static let signScale: CGFloat = 0.6
     static let minusScale: CGFloat = 0.7
@@ -78,13 +89,10 @@ enum Layout {
     static let signToPlayPause: CGFloat = 40
     static let playToPause: CGFloat = 50
 
-    /// Middle of the watermelon's red flesh once it's turned upright, in design pixels.
-    static let fleshCenter = CGPoint(x: 134, y: 256)
-
-    /// The part of the canvas kept on screen when collapsed: the watermelon plus room to sway,
-    /// shake and hop (the rind reaches x ~ -73; mid-shake it grows ~16%). Multiples of 4 so it
-    /// lands on whole points and the window doesn't creep from rounding as it collapses/expands.
-    static let collapsedRect = CGRect(x: -116, y: -32, width: 412, height: 576)
+    /// The part of the canvas kept on screen when collapsed: the upright watermelon (x -86...260,
+    /// y 59...504) plus room to sway, shake and hop (it grows ~16%). Multiples of 4 so it lands on
+    /// whole points and the window doesn't creep from rounding as it collapses/expands.
+    static let collapsedRect = CGRect(x: -128, y: -20, width: 412, height: 564)
 
     static func windowSize(collapsed: Bool) -> CGSize {
         collapsed ? CGSize(width: collapsedRect.width * scale, height: collapsedRect.height * scale) : windowSize
@@ -97,10 +105,10 @@ enum Layout {
             : CGPoint(x: shadowPadding + leftOverhang, y: shadowPadding)
     }
 
-    /// Where seeds pop from, in points from the window's top-left corner.
-    static func seedOrigin(collapsed: Bool) -> CGPoint {
+    /// A point on the canvas, in points from the window's top-left corner.
+    static func windowPoint(_ canvasPoint: CGPoint, collapsed: Bool) -> CGPoint {
         let origin = canvasOrigin(collapsed: collapsed)
-        return CGPoint(x: origin.x + fleshCenter.x * scale, y: origin.y + fleshCenter.y * scale)
+        return CGPoint(x: origin.x + canvasPoint.x * scale, y: origin.y + canvasPoint.y * scale)
     }
 }
 
@@ -119,17 +127,13 @@ struct WidgetView: View {
         ZStack(alignment: .topLeading) {
             // The background is what you grab to drag and right-click; everything drawn
             // on top of it (except the buttons) lets the mouse fall through to it.
-            ZStack {
-                layer("white_bg")
-                    .shadow(color: Layout.pink.opacity(0.9), radius: 40, x: 0, y: 14)
-                layer("pink_bg")
-            }
-            .contentShape(Rectangle())
+            layer("base")
+                .shadow(color: Layout.glow.opacity(0.9), radius: 40, x: 0, y: 14)
+                .contentShape(Rectangle())
             .gesture(windowDrag())
             .contextMenu { menu }
             .card(visible: state.cardVisible)
 
-            layer("border").allowsHitTesting(false).card(visible: state.cardVisible)
             watermelon
             watermelonHitArea
             time.position(Layout.timeCenter).card(visible: state.cardVisible)
@@ -147,18 +151,16 @@ struct WidgetView: View {
         .background(state.isCollapsed ? Color.black.opacity(0.01) : Color.clear)
     }
 
-    /// Clicking the watermelon (the slice's own outline, not its square frame) tucks the
-    /// widget away or brings it back; dragging it moves the widget as usual.
+    /// Clicking the watermelon (its own outline, not its square frame) tucks the widget away
+    /// or brings it back; dragging it moves the widget as usual.
     private var watermelonHitArea: some View {
-        let shape = RindShape.outer
-        return Color.clear
-            .frame(width: shape.size.width, height: shape.size.height)
-            .contentShape(shape)
+        Color.clear
+            .frame(width: Layout.canvas.width, height: Layout.canvas.height)
+            .contentShape(WatermelonOutline())
             .onTapGesture { state.toggle() }
             .gesture(windowDrag(minimumDistance: 3))
             .contextMenu { menu }
             .help(state.isCollapsed ? "Show timer" : "Tuck away")
-            .offset(x: shape.origin.x, y: shape.origin.y)
     }
 
     private func layer(_ name: String) -> some View {
@@ -170,26 +172,32 @@ struct WidgetView: View {
 
     // MARK: Watermelon
 
-    /// The slice plus the two rind shapes behind it (Figma "Vector 1" and "Vector 2"),
-    /// grouped so they sway and shake together.
+    /// The watermelon, with one more bite out of it for every half hour of the session.
     private var watermelon: some View {
-        ZStack(alignment: .topLeading) {
-            RindShape.outer
-                .fill(RindShape.outerColor)
-                .frame(width: RindShape.outer.size.width, height: RindShape.outer.size.height)
-                .offset(x: RindShape.outer.origin.x, y: RindShape.outer.origin.y)
-            RindShape.inner
-                .fill(RindShape.innerColor)
-                .frame(width: RindShape.inner.size.width, height: RindShape.inner.size.height)
-                .offset(x: RindShape.inner.origin.x, y: RindShape.inner.origin.y)
-            Image(nsImage: Art.image("watermelon"))
-                .resizable()
-                .interpolation(.high)
-                .frame(width: Layout.watermelonSize.width, height: Layout.watermelonSize.height)
-                .rotationEffect(.degrees(Layout.watermelonAngle))
-                .position(Layout.watermelonCenter)
-        }
-        .frame(width: Layout.canvas.width, height: Layout.canvas.height, alignment: .topLeading)
+        Image(nsImage: Art.image(timer.bites == 0 ? "watermelon" : "watermelon_bite\(timer.bites)"))
+            .resizable()
+            .interpolation(.high)
+            .frame(width: Layout.watermelonSize.width, height: Layout.watermelonSize.height)
+            .rotationEffect(.degrees(Layout.watermelonAngle))
+            .position(Layout.watermelonCenter)
+            .frame(width: Layout.canvas.width, height: Layout.canvas.height, alignment: .topLeading)
+            // A quick chomp each time a bite is taken.
+            .keyframeAnimator(initialValue: Shake(), trigger: timer.bites) { content, chomp in
+                content
+                    .rotationEffect(.degrees(chomp.angle), anchor: Layout.watermelonAnchor)
+                    .scaleEffect(chomp.scale, anchor: Layout.watermelonAnchor)
+            } keyframes: { _ in
+                KeyframeTrack(\.scale) {
+                    CubicKeyframe(0.93, duration: 0.08)
+                    SpringKeyframe(1.05, duration: 0.15)
+                    SpringKeyframe(1.0, duration: 0.3)
+                }
+                KeyframeTrack(\.angle) {
+                    CubicKeyframe(-4, duration: 0.08)
+                    CubicKeyframe(3, duration: 0.12)
+                    SpringKeyframe(0, duration: 0.3)
+                }
+            }
             // Gentle sway while focusing.
             .phaseAnimator([-2.5, 2.5]) { content, angle in
                 content.rotationEffect(.degrees(timer.isRunning ? angle : 0), anchor: Layout.watermelonAnchor)
@@ -372,47 +380,27 @@ struct SquishStyle: ButtonStyle {
     }
 }
 
-// MARK: - Rind
+// MARK: - Outline
 
-/// The flat rind shapes drawn behind the watermelon in the Figma frame: a dark green crescent
-/// (Vector 1) with a salmon shape over it (Vector 2), so an even band of dark green shows.
-/// Paths are copied from Figma's SVG export; `origin` is their spot on the design canvas.
-struct RindShape: Shape {
-    let origin: CGPoint
-    let size: CGSize
-    let draw: @Sendable (inout Path) -> Void
-
-    static let outerColor = Color(red: 0x13 / 255, green: 0x43 / 255, blue: 0)          // #134300
-    static let innerColor = Color(red: 1, green: 0xAE / 255, blue: 0x9B / 255)          // #FFAE9B
-
-    // Figma positions are relative to the frame, whose canvas starts at (13, -24).
-    static let outer = RindShape(origin: CGPoint(x: -60.11 - 13, y: 38 + 24),
-                                 size: CGSize(width: 330.106, height: 438)) { p in
-        p.move(to: CGPoint(x: 11.7834, y: 292.166))
-        p.addCurve(to: CGPoint(x: 180.689, y: 0),
-                   control1: CGPoint(x: -41.394, y: 104.5), control2: CGPoint(x: 97.9021, y: 17.48))
-        p.addLine(to: CGPoint(x: 330.106, y: 410.53))
-        p.addCurve(to: CGPoint(x: 11.7834, y: 292.166),
-                   control1: CGPoint(x: 250.484, y: 450.984), control2: CGPoint(x: 71.0441, y: 470.961))
-        p.closeSubpath()
-    }
-
-    static let inner = RindShape(origin: CGPoint(x: -23.45 - 13, y: 38 + 24),
-                                 size: CGSize(width: 293.451, height: 436.119)) { p in
-        p.move(to: CGPoint(x: 14.9508, y: 286))
-        p.addCurve(to: CGPoint(x: 144.034, y: 0),
-                   control1: CGPoint(x: -38.2266, y: 98.3342), control2: CGPoint(x: 61.2469, y: 17.48))
-        p.addLine(to: CGPoint(x: 293.451, y: 410.53))
-        p.addCurve(to: CGPoint(x: 14.9508, y: 286),
-                   control1: CGPoint(x: 213.828, y: 450.984), control2: CGPoint(x: 74.2115, y: 464.795))
-        p.closeSubpath()
-    }
+/// The watermelon's outline, traced from its drawing (left and right edges every 20px down) and
+/// turned upright like the slice, so only the slice itself is clickable. Drawn in canvas
+/// coordinates: give it a frame the size of the canvas.
+struct WatermelonOutline: Shape {
+    private static let points: [CGPoint] = [
+        // down the right side: the cut edge, then the rind
+        (70, 133), (86, 140), (122, 160), (165, 180), (202, 200), (246, 220), (278, 240), (313, 260),
+        (349, 280), (384, 300), (424, 320), (455, 340), (449, 360), (439, 380), (427, 400), (411, 420),
+        (392, 440), (367, 460), (339, 480), (294, 500), (230, 506),
+        // back up the left side
+        (163, 500), (121, 480), (96, 460), (77, 440), (62, 420), (48, 400), (37, 380), (29, 360),
+        (22, 340), (18, 320), (15, 300), (15, 280), (15, 260), (18, 240), (23, 220), (28, 200),
+        (37, 180), (47, 160), (61, 140),
+    ].map { CGPoint(x: $0.0, y: $0.1) }
 
     func path(in rect: CGRect) -> Path {
         var p = Path()
-        draw(&p)
-        // Stretch from the SVG's own size to whatever frame it's given (they match here).
-        return p.applying(CGAffineTransform(translationX: rect.minX, y: rect.minY)
-            .scaledBy(x: rect.width / size.width, y: rect.height / size.height))
+        p.addLines(Self.points.map(Layout.upright).map { CGPoint(x: rect.minX + $0.x, y: rect.minY + $0.y) })
+        p.closeSubpath()
+        return p
     }
 }

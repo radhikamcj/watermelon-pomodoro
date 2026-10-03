@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let loginItem = LoginItem()
     private let state = WidgetState()
     private var celebrationWatch: AnyCancellable?
+    private var biteWatch: AnyCancellable?
     private var hideSeeds: DispatchWorkItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -35,7 +36,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         state.onLayoutChange = { [weak self] collapsed in self?.resizePanel(collapsed: collapsed) }
         celebrationWatch = timer.$celebrationCount
             .dropFirst()
-            .sink { [weak self] _ in self?.popSeeds() }
+            .sink { [weak self] _ in self?.popSeeds(from: Layout.fleshCenter) }
+        // A little pop of seeds from each new bite.
+        biteWatch = timer.$bites
+            .scan((0, 0)) { ($0.1, $1) }
+            .filter { old, new in new > old }
+            .sink { [weak self] _, bites in
+                self?.popSeeds(from: Layout.biteCenters[bites - 1], volleys: 1, perVolley: 5)
+            }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -67,13 +75,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Shows the seed overlay around the widget for as long as the seeds are flying.
-    private func popSeeds() {
+    /// `point` is on the design canvas.
+    private func popSeeds(from point: CGPoint, volleys: Int = 3, perVolley: Int = 4) {
         let margin = SeedPanel.margin
         seedPanel.setFrame(panel.frame.insetBy(dx: -margin, dy: -margin), display: false)
 
-        let seedOrigin = Layout.seedOrigin(collapsed: state.isCollapsed)
-        let origin = CGPoint(x: margin + seedOrigin.x, y: margin + seedOrigin.y)
-        let seeds = Seed.bursts(from: origin)
+        let start = Layout.windowPoint(point, collapsed: state.isCollapsed)
+        let origin = CGPoint(x: margin + start.x, y: margin + start.y)
+        let seeds = Seed.bursts(from: origin, volleys: volleys, perVolley: perVolley)
         let hosting = NSHostingView(rootView: SeedBurstView(seeds: seeds, startDate: Date()))
         // Don't let SwiftUI resize the overlay to fit; it must line up exactly with the widget.
         hosting.sizingOptions = []

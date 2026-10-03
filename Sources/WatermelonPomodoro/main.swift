@@ -4,9 +4,10 @@ import AppKit
 if let i = CommandLine.arguments.firstIndex(of: "--snapshot"), i + 1 < CommandLine.arguments.count {
     let seeds = CommandLine.arguments.contains("--seeds")
     let minutes = CommandLine.arguments.firstIndex(of: "--minutes").flatMap { Int(CommandLine.arguments[$0 + 1]) } ?? 0
+    let elapsed = CommandLine.arguments.firstIndex(of: "--elapsed").flatMap { Int(CommandLine.arguments[$0 + 1]) } ?? 0
     let collapsed = CommandLine.arguments.contains("--collapsed")
     MainActor.assumeIsolated {
-        Snapshot.write(to: CommandLine.arguments[i + 1], seeds: seeds, minutes: minutes, collapsed: collapsed)
+        Snapshot.write(to: CommandLine.arguments[i + 1], seeds: seeds, minutes: minutes, elapsed: elapsed, collapsed: collapsed)
     }
     exit(0)
 }

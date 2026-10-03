@@ -17,6 +17,9 @@ final class PomodoroTimer: ObservableObject {
     /// – / + change the time by this much, between 0 and `maxSeconds`.
     static let stepSeconds = 15 * 60
     static let maxSeconds = 180 * 60
+    /// One bite comes out of the watermelon for every half hour a session has been running.
+    static let biteSeconds = 30 * 60
+    static let maxBites = 3
 
     @Published private(set) var mode: TimerMode = .focus
     @Published private(set) var remaining = 0
@@ -24,11 +27,17 @@ final class PomodoroTimer: ObservableObject {
     @Published private(set) var slicesToday = 0
     /// Bumped every time a session ends, to kick off the celebration.
     @Published private(set) var celebrationCount = 0
+    /// Bites taken out of the watermelon so far this session (0...3).
+    @Published private(set) var bites = 0
 
     private var ticker: Timer?
     private var endDate: Date?
     /// What the timer was last set to, so Reset can go back to it.
     private var setSeconds = 0
+    /// The current session's full length, including any – / + along the way.
+    private var sessionSeconds = 0 {
+        didSet { updateBites() }
+    }
 
     /// MM:SS under an hour, HH:MM:SS from an hour up.
     var timeText: String {
@@ -60,6 +69,7 @@ final class PomodoroTimer: ObservableObject {
     func reset() {
         pause()
         remaining = setSeconds
+        sessionSeconds = setSeconds
     }
 
     func setMinutes(_ minutes: Int, for target: TimerMode) {
@@ -67,6 +77,7 @@ final class PomodoroTimer: ObservableObject {
         mode = target
         setSeconds = minutes * 60
         remaining = setSeconds
+        sessionSeconds = setSeconds
     }
 
     var canAdjustDown: Bool {
@@ -91,6 +102,12 @@ final class PomodoroTimer: ObservableObject {
         } else {
             setSeconds = remaining
         }
+        sessionSeconds += remaining - old
+    }
+
+    private func updateBites() {
+        let eaten = min(Self.maxBites, max(0, (sessionSeconds - remaining) / Self.biteSeconds))
+        if eaten != bites { bites = eaten }
     }
 
     // MARK: - Ticking
@@ -98,7 +115,10 @@ final class PomodoroTimer: ObservableObject {
     private func tick() {
         guard let endDate else { return }
         let left = max(0, Int(ceil(endDate.timeIntervalSinceNow)))
-        if left != remaining { remaining = left }
+        if left != remaining {
+            remaining = left
+            updateBites()
+        }
         if left == 0 { finish() }
     }
 
@@ -114,6 +134,14 @@ final class PomodoroTimer: ObservableObject {
         mode = .focus
         setSeconds = 0
         remaining = 0
+        sessionSeconds = 0
         celebrate()
+    }
+
+    /// Dev helper for snapshots: a session of `total` minutes with `elapsed` minutes gone.
+    func preview(total: Int, elapsed: Int) {
+        setMinutes(total, for: .focus)
+        remaining = (total - elapsed) * 60
+        updateBites()
     }
 }

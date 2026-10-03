@@ -13,9 +13,9 @@ struct Seed {
     static let gravity: CGFloat = 900
 
     /// A few quick volleys of seeds, timed to the watermelon's hops.
-    static func bursts(from origin: CGPoint) -> [Seed] {
-        (0..<3).flatMap { volley in
-            (0..<4).map { _ in
+    static func bursts(from origin: CGPoint, volleys: Int = 3, perVolley: Int = 4) -> [Seed] {
+        (0..<volleys).flatMap { volley in
+            (0..<perVolley).map { _ in
                 let heading = Double.random(in: -155 ... -25) * .pi / 180
                 let speed = Double.random(in: 180...340)
                 return Seed(

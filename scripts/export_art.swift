@@ -1,5 +1,5 @@
 // Turns the full-canvas design layers in PNGs/ (1000 x 560) into the images the app uses.
-// Background layers are copied as-is; glyphs are cropped tight so they can be laid out live.
+// The base and watermelon layers are copied as-is; glyphs are cropped tight so they can be laid out live.
 // Run from the project root: swift scripts/export_art.swift
 import AppKit
 
@@ -52,21 +52,6 @@ func thicken(_ image: CGImage, by radius: Int) -> CGImage {
 
 /// How much bolder the numbers and controls are than the original drawings, in design pixels.
 let strokeBoost = 6
-
-/// The smoothed border: a rounded rectangle fitted to the median of the hand-drawn stroke on each side.
-enum Outline {
-    static let left = 36.0, right = 948.0, top = 45.5, bottom = 530.5
-    static let radius = 58.0, thickness = 26.0
-    static let cx = (left + right) / 2, cy = (top + bottom) / 2
-    static let hx = (right - left) / 2, hy = (bottom - top) / 2
-
-    /// Signed distance to the stroke's centerline (negative inside the card).
-    static func sdf(_ x: Double, _ y: Double) -> Double {
-        let qx = abs(x - cx) - (hx - radius), qy = abs(y - cy) - (hy - radius)
-        let outside = (max(qx, 0) * max(qx, 0) + max(qy, 0) * max(qy, 0)).squareRoot()
-        return outside + min(max(qx, qy), 0) - radius
-    }
-}
 
 /// Pixel access for an image, top-left origin, premultiplied RGBA 0...255.
 struct Pixels {
@@ -124,88 +109,9 @@ func noise(_ x: Double, _ y: Double, scale: Double, seed: UInt64) -> Double {
     return top * (1 - fy) + bottom * fy
 }
 
-/// Evens out the hand-drawn border: the stroke follows the smooth `Outline` at one thickness,
-/// filled with the crayon texture copied from the middle of the original stroke. For each point
-/// on the new outline it looks straight across the original stroke at that spot and stretches
-/// that slice to the even thickness. The edges get a gentle crayon-like roughness of their own.
-func smoothBorder(_ image: CGImage) -> CGImage {
-    let src = Pixels(image), out = Pixels(width: image.width, height: image.height)
-    let half = Outline.thickness / 2
-
-    /// Where the original stroke starts and ends along a line (in steps from `origin`), if it's there.
-    func strokeSpan(from origin: (Double, Double), along n: (Double, Double)) -> (Double, Double)? {
-        var spans: [(Double, Double)] = []
-        var start: Double?
-        for step in stride(from: -48.0, through: 48.0, by: 1) {
-            let solid = src.sample(origin.0 + n.0 * step, origin.1 + n.1 * step).3 > 90
-            if solid, start == nil { start = step }
-            if !solid, let s = start { spans.append((s, step - 1)); start = nil }
-        }
-        if let s = start { spans.append((s, 48)) }
-        // The stroke closest to the new centerline, and only if it's substantial enough to stretch.
-        return spans.filter { $0.1 - $0.0 >= 13 }.min { abs($0.0 + $0.1) < abs($1.0 + $1.1) }
-    }
-
-    /// Crayon texture for a point on the new stroke, borrowing from the mirrored side where the drawing has a gap.
-    func texture(_ x: Double, _ y: Double, _ d: Double) -> (Double, Double, Double, Double)? {
-        for (mx, my) in [(x, y), (2 * Outline.cx - x, y), (x, 2 * Outline.cy - y), (2 * Outline.cx - x, 2 * Outline.cy - y)] {
-            let e = 0.25
-            var n = (Outline.sdf(mx + e, my) - Outline.sdf(mx - e, my), Outline.sdf(mx, my + e) - Outline.sdf(mx, my - e))
-            let len = (n.0 * n.0 + n.1 * n.1).squareRoot()
-            guard len > 0 else { continue }
-            n = (n.0 / len, n.1 / len)
-            let onLine = (mx - d * n.0, my - d * n.1)
-            guard let span = strokeSpan(from: onLine, along: n) else { continue }
-            // Stay in the body of the original stroke; its ragged edges are what we're replacing.
-            let u = min(0.88, max(0.12, (d + half) / Outline.thickness))
-            let t = span.0 + u * (span.1 - span.0)
-            return src.sample(onLine.0 + n.0 * t, onLine.1 + n.1 * t)
-        }
-        return nil
-    }
-
-    for y in 0..<out.h {
-        for x in 0..<out.w {
-            let fx = Double(x) + 0.5, fy = Double(y) + 0.5
-            let d = Outline.sdf(fx, fy)
-            guard abs(d) <= half + 4 else { continue }
-            // Gentle wobble on each edge (a couple of pixels over a few px), plus fine grain.
-            let wobble = (noise(fx, fy, scale: 5, seed: d < 0 ? 11 : 29) - 0.5) * 2.6
-                + (noise(fx, fy, scale: 1.6, seed: d < 0 ? 5 : 7) - 0.5) * 1.4
-            let edge = half - abs(d) + wobble
-            let mask = min(1, max(0, edge / 1.4 + 0.5))
-            guard mask > 0, let c = texture(fx, fy, d) else { continue }
-            out.set(x, y, (c.0 * mask, c.1 * mask, c.2 * mask, c.3 * mask))
-        }
-    }
-    return out.image
-}
-
-/// Fits a background layer to the smoothed border: trims anything poking outside it and, with
-/// `fill`, paints the gaps between the background's hand-drawn edge and the border in that color.
-func fitBackground(_ image: CGImage, fill: (Double, Double, Double)? = nil) -> CGImage {
-    let src = Pixels(image), out = Pixels(width: image.width, height: image.height)
-    let half = Outline.thickness / 2
-    for y in 0..<out.h {
-        for x in 0..<out.w {
-            let fx = Double(x) + 0.5, fy = Double(y) + 0.5
-            let d = Outline.sdf(fx, fy)
-            guard d < 0 else { continue }   // under or outside the border's centerline: never visible
-            var c = src.sample(fx, fy)
-            // Near the border, fill whatever the drawing left uncovered (not the specks further in).
-            if let fill, d > -(half + 30) {
-                let gap = 1 - c.3 / 255
-                c = (c.0 + fill.0 * gap, c.1 + fill.1 * gap, c.2 + fill.2 * gap, c.3 + 255 * gap)
-            }
-            out.set(x, y, c)
-        }
-    }
-    return out.image
-}
-
 /// A cleaner play button in the same white crayon style: a rounded triangle about 0.88x as wide
 /// as it is tall, with all three corners rounded alike (the hand-drawn one was long and pointy).
-/// The edge gets the same gentle roughness as the smoothed border.
+/// The edge gets a gentle crayon-like roughness.
 func playGlyph() -> CGImage {
     // Size of the triangle before rounding; rounding trims the tips, and the result is cropped
     // to what's visible, landing at the same height as the pause bars (~115 tall x 104 wide).
@@ -251,9 +157,8 @@ func playGlyph() -> CGImage {
     return image.cropping(to: visibleBounds(image, padding: 4))!
 }
 
-save(fitBackground(load("white_bg")), "white_bg")
-save(fitBackground(load("pink_bg"), fill: (255, 176, 176)), "pink_bg")   // #FFB0B0, the background's average
-save(smoothBorder(load("border")), "border")
+// The card: one hand-drawn base with its speckles built in.
+save(load("New base"), "base")
 
 let glyphs = (0...9).map(String.init) + ["colon", "minus", "plus", "pause"]
 for name in glyphs {
@@ -263,9 +168,13 @@ for name in glyphs {
     save(thicken(image.cropping(to: visibleBounds(image))!, by: boost), name)
 }
 
-// Same crop as the Figma frame: the left 469 x 560 of the canvas. The app rotates it upright.
-// Keep in sync with WidgetView.Layout.watermelonSize.
-save(load("watermelon").cropping(to: CGRect(x: 0, y: 0, width: 469, height: 560))!, "watermelon")
+// The watermelon, whole and after each bite (one every half hour). Same crop as the Figma frame:
+// the left 469 x 560 of the canvas; the app turns it upright. Keep in sync with Layout.watermelonSize.
+let watermelonCrop = CGRect(x: 0, y: 0, width: 469, height: 560)
+save(load("New watermelon").cropping(to: watermelonCrop)!, "watermelon")
+for (k, name) in ["1 bite", "2 bites", "3 bites"].enumerated() {
+    save(load(name).cropping(to: watermelonCrop)!, "watermelon_bite\(k + 1)")
+}
 
 save(playGlyph(), "play")
 

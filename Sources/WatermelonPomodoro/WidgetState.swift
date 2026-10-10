@@ -16,6 +16,11 @@ final class WidgetState: ObservableObject {
 
     private var animating = false
 
+    /// Where a drag of the widget started (mouse and window origin, in screen coordinates).
+    /// Kept here rather than in SwiftUI `@State`, which needs a compiler plugin the Command Line
+    /// Tools don't ship with the macOS 27 SDK. Not published: it never changes what's drawn.
+    var dragStart: (mouse: NSPoint, origin: NSPoint)?
+
     init(collapsed: Bool = false) {
         isCollapsed = collapsed
         cardVisible = !collapsed

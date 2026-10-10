@@ -23,10 +23,11 @@ codesign --force --sign - "$APP" >/dev/null
 
 echo "Built $APP"
 
-# ./build.sh --install  also copies it into /Applications (quitting a running copy first).
+# ./build.sh --install  moves it into /Applications instead (quitting a running copy first),
+# so there's only ever one Watermelon on the Mac.
 if [ "${1:-}" = "--install" ]; then
     pkill -x Watermelon || true
     rm -rf /Applications/Watermelon.app
-    cp -R "$APP" /Applications/Watermelon.app
+    mv "$APP" /Applications/Watermelon.app
     echo "Installed /Applications/Watermelon.app"
 fi

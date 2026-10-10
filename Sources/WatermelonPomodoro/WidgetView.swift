@@ -136,7 +136,6 @@ struct WidgetView: View {
     @EnvironmentObject private var timer: PomodoroTimer
     @EnvironmentObject private var loginItem: LoginItem
     @EnvironmentObject private var state: WidgetState
-    @State private var dragStart: (mouse: NSPoint, origin: NSPoint)?
 
     var body: some View {
         let origin = Layout.canvasOrigin(collapsed: state.isCollapsed)
@@ -347,16 +346,16 @@ struct WidgetView: View {
             .onChanged { _ in
                 guard let window = NSApp.windows.first(where: { $0 is FloatingPanel }) else { return }
                 let mouse = NSEvent.mouseLocation
-                if dragStart == nil {
-                    dragStart = (mouse, window.frame.origin)
+                if state.dragStart == nil {
+                    state.dragStart = (mouse, window.frame.origin)
                 }
-                guard let start = dragStart else { return }
+                guard let start = state.dragStart else { return }
                 window.setFrameOrigin(NSPoint(
                     x: start.origin.x + mouse.x - start.mouse.x,
                     y: start.origin.y + mouse.y - start.mouse.y
                 ))
             }
-            .onEnded { _ in dragStart = nil }
+            .onEnded { _ in state.dragStart = nil }
     }
 
     @ViewBuilder

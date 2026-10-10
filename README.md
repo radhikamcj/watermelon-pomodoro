@@ -24,7 +24,7 @@ Requires macOS 14+ and the Swift toolchain (Xcode or the Command Line Tools: `xc
 open /Applications/Watermelon.app
 ```
 
-`--install` copies the app into **Applications** (plain `./build.sh` just builds `build/Watermelon.app`).
+`--install` moves the app into **Applications**, so there's only one copy (plain `./build.sh` just builds `build/Watermelon.app` for testing).
 The widget has no Dock icon; to bring it back after quitting, open **Watermelon** from Spotlight,
 or right-click it and turn on **Open at login** so it starts with your Mac.
 
